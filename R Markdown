@@ -1,0 +1,26 @@
+---
+title: "Análisis de las visitas de extranjeros a Colombia"
+author: "Andres Felipe Olaya Camacho"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+    theme: tactile
+    highlight: vignette
+    toc: false 
+  
+---
+
+## Librerias
+```{r, warning=FALSE, message=FALSE}
+library(foreign)
+library(ggfortify)
+library(forecast)
+library(gridExtra)
+library(seasonal)
+library(lattice)
+library(zoo)
+library(urca)
+library(dynlm)
+library(TSstudio)
+
+```
