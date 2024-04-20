@@ -1,0 +1,247 @@
+---
+title: "Análisis de las dinámicas turísticas en Colombia"
+author: "Andres Felipe Olaya Camacho"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+    theme: tactile
+    highlight: github
+    float: true
+    toc: true 
+  
+---
+
+## Introducción.
+
+La industria turística es un sector crucial para la economía del país, y comprender los factores que influyen en la llegada de visitantes extranjeros puede proporcionar información valiosa para la toma de decisiones tanto en el ámbito público como en el privado.
+
+En este análisis univariado, exploraremos las visitas de extranjeros a Colombia desde enero de 2015 hasta febrero de 2024. Este estudio se realiza con el objetivo de comprender mejor los patrones y tendencias en el turismo extranjero hacia Colombia a lo largo del tiempo.
+
+Fuente de datos: 
+<https://www.datos.gov.co/Comercio-Industria-y-Turismo/Visitantes-No-Residentes/bkar-zsub/about_data>.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+#Instalamos librerías necesarias
+library(ggfortify)
+library(gridExtra)
+library(seasonal)
+library(lattice)
+library(zoo)
+library(urca)
+library(TSstudio)
+library(readr)
+library(tidyverse)
+library(lubridate)
+library(tseries)
+library(astsa)
+library(forecast)
+library(foreign)
+library(timsac)
+library(vars)
+library(mFilter)
+library(dynlm)
+library(highcharter)
+```
+
+
+## Data.
+```{r, echo=FALSE}
+# Cargarmos los datos
+url <- "https://raw.githubusercontent.com/pituland/DTC/main/SerieVNR.csv"
+
+datos <- read.csv(url)
+
+```
+
+
+```{r, echo=FALSE}
+#Breve análisis de datos estadísticos descripivos
+cat("Sumary:", (summary(datos)), "\n")
+cat("La desviación estándar es:", (desviacion_estandar <- sd(datos$Suma.de.Extranjeros.no.Residentes)), "\n")
+cat("El coeficiente de variación es:", (desviacion_estandar / mean(datos$Suma.de.Extranjeros.no.Residentes) * 100),"\n")
+```
+
+```{r, echo=FALSE}
+# Crear la serie de tiempo
+serie_tiempo <- ts(datos, start = c(2015, 1), frequency = 12)
+```
+
+```{r, echo=FALSE}
+#imprimimos la serie
+serie_tiempo
+```
+Visualizamos la serie
+```{r, echo=FALSE}
+#Visualizamos la serie
+hchart(serie_tiempo)
+```
+
+```{r, echo=FALSE}
+#ts_seasonal(serie_tiempo, type="all")
+```
+Serie original descompuesta
+
+```{r, echo=FALSE}
+ts_decompose(serie_tiempo, type = "both")
+```
+
+## Modelo AR(p).
+
+$$ y_t = \phi_1 y_{t-1} + \phi_2 y_{t-2} + \ldots + \phi_p y_{t-p} + \varepsilon_t $$
+
+1. Modelo autorregresivo de orden 1
+```{r, echo=FALSE}
+modelo_ar1 <- dynlm(serie_tiempo ~ L(serie_tiempo))
+summary(modelo_ar1)
+
+```
+2. Modelo autorregresivo de orden 2
+```{r, echo=FALSE}
+modelo_ar2 <- dynlm(serie_tiempo ~ L(serie_tiempo, c(1, 2)))
+summary(modelo_ar2)
+```
+3. Modelo autorregresivo de orden con 3 rezagos X
+```{r, echo=FALSE}
+modelo_ar3 <- dynlm(serie_tiempo ~ L(serie_tiempo, c(1, 2, 70)))
+summary(modelo_ar3)
+```
+4. Modelo autorregresivo de orden 3
+```{r, echo=FALSE}
+modelo_ar4 <- dynlm(serie_tiempo ~ L(serie_tiempo, 1: 3))
+summary(modelo_ar4)
+```
+5. Modelo autorregresivo de orden 3 + tendencia + etacionalidad
+```{r, echo=FALSE}
+modelo_ar5 <- dynlm(serie_tiempo ~ L(serie_tiempo, 1: 3) + trend(serie_tiempo) + season(serie_tiempo))
+summary(modelo_ar5)
+```
+6. Modelo autorregresivo de orden 3 + etacionalidad
+```{r, echo=FALSE}
+modelo_ar6 <- dynlm(serie_tiempo ~ L(serie_tiempo, 1: 3) + season(serie_tiempo))
+summary(modelo_ar6)
+```
+En el modelo con tendencia y estacionalidad agregadas, el intercepto se vuelve significativo
+
+
+## Serie transformada.
+
+1. Serie con transformación logaritmica:
+```{r, echo=FALSE}
+serielog = log(serie_tiempo)
+hchart(serielog)
+```
+Serie con transformación logaritmica descompuesta
+```{r, echo=FALSE}
+ts_decompose(serielog, type = "both")
+```
+
+2. serie transformada con una diferencia:
+
+```{r, echo=FALSE}
+#hacemos la primera diferencia
+seriediff =  diff(serie_tiempo)
+hchart(seriediff)
+```
+
+Serie transformada con una diferencia descompuesta
+```{r, echo=FALSE}
+ts_decompose(seriediff, type = "both")
+```
+
+## Prueba D y F.
+Nos permite saber si la serie es estacionaria o no.
+
+
+1.serie_tiempo
+```{r, echo=FALSE}
+adf.test(serie_tiempo)
+```
+2. serielog
+```{r, echo=FALSE}
+adf.test(serielog)
+```
+3.seriediff
+```{r, echo=FALSE}
+adf.test(seriediff)
+```
+
+## Función de  autocorrelación y autocorrelación parcial.
+Gráfico de autocorrelación parcial (PACF): Para determinar el orden p del modelo AR(p).
+Gráfico de autocorrelación (ACF): Para determinar el orden q del modelo MA(q).
+
+1. Serie original:
+
+```{r, echo=FALSE}
+acf(ts(serie_tiempo, frequency = 1))
+pacf(ts(serie_tiempo, frequency = 1))
+```
+
+2. Serie con transformación logaritmica:
+
+```{r, echo=FALSE}
+acf(ts(serielog, frequency = 1))
+pacf(ts(serielog, frequency = 1))
+```
+
+3.Serie con una diferencia:
+
+```{r, echo=FALSE}
+acf(ts(seriediff, frequency = 1))
+pacf(ts(seriediff, frequency = 1))
+```
+
+
+## Modelo ARIMA.
+
+
+```{r, echo=FALSE}
+modelo1 = arima(serie_tiempo, order = c(2,1,0))#hay que tener cuidado, hacerlo con la serie original
+modelo1
+```
+```{r, echo=FALSE}
+tsdiag(modelo1)
+```
+
+## Validez con Ruido blanco.
+
+Test de Box
+```{r, echo=FALSE}
+Box.test(residuals(modelo1), type = "Ljung-Box")
+```
+Cómo los p-valores dieron mayor a 0.05, significa que existe ruido blanco y nuestro modelo se ajusta bien.
+
+```{r, echo=FALSE}
+error = residuals(modelo1)
+plot(error)
+```
+
+## Pronostico.
+
+```{r, echo=FALSE}
+pronostico <- forecast::forecast(modelo1, h = 7)
+```
+```{r, echo=FALSE}
+plot(pronostico)
+```
+```{r}
+pronostico
+```
+
+
+Datos originales:
+
+Agosto 2023 = 375.321
+
+Septiermbre 2023 = 312.056
+
+Octubre 2023 = 304.980
+
+Noviembre 2023 = 358.251
+
+Diciembre 2023 = 394.351
+
+Enero 2024 = 355.816
+
+Febrero 2024 = 380.546
+
+
